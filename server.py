@@ -1,54 +1,40 @@
 #!/usr/bin/env python3
-import socket
-import threading
-import json
+import socket, threading, json, sys
 
-HOST, PORT = '0.0.0.0', 12345
-clients = {}  # {client_socket: username}
+PORT = 12345
+clients = {}  # {socket: username}
 
-def broadcast(sender, msg):
-    for sock, user in clients.items():
-        if sock != sender:
-            try:
-                sock.sendall(json.dumps(msg).encode() + b'\n')
-            except:
-                sock.close()
-                del clients[sock]
-
-def handle_client(conn, addr):
-    print(f"[+] Connexion de {addr}")
+def relay(conn, addr):
     try:
-        # Premier message = nom d'utilisateur
-        data = conn.recv(1024).decode().strip()
-        user = json.loads(data)['user']
+        # Premier message = identifiant utilisateur
+        user = json.loads(conn.recv(256).decode())['user'][:32]  # limite 32 caractères
         clients[conn] = user
-        print(f"  → Utilisateur: {user}")
-
+        print(f"+ {addr[0]} → @{user}")
+        
         while True:
-            data = conn.recv(4096)
-            if not data:
-                break
-            msg = json.loads(data.decode().strip())
+            data = conn.recv(1024)
+            if not data: break
+            msg = json.loads(data.decode())
             msg['from'] = user
-            print(f"[MSG] {user} → {msg['to']}: {msg['text'][:50]}")
-            broadcast(conn, msg)
-    except Exception as e:
-        print(f"[-] Erreur {addr}: {e}")
+            # Relais à tous les clients sauf l'expéditeur
+            for c, u in clients.items():
+                if c != conn:
+                    try: c.sendall((json.dumps(msg) + '\n').encode())
+                    except: pass
+    except: pass
     finally:
-        print(f"[-] Déconnexion de {clients.get(conn, addr)}")
-        clients.pop(conn, None)
+        print(f"- {addr[0]} ← @{clients.pop(conn, '?')}")
         conn.close()
 
 def main():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind((HOST, PORT))
-        s.listen()
-        print(f"✓ Serveur relais démarré sur {HOST}:{PORT}")
-        print("  → Aucun stockage côté serveur\n")
-        while True:
-            conn, addr = s.accept()
-            threading.Thread(target=handle_client, args=(conn, addr), daemon=True).start()
+    s = socket.socket()
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    s.bind(('0.0.0.0', PORT))
+    s.listen()
+    print(f"✓ Relais actif sur 65.75.201.11:{PORT} (ouvert à tous)")
+    print("  → Aucun stockage côté serveur — messages sauvegardés localement par les clients\n")
+    while True:
+        threading.Thread(target=relay, args=s.accept(), daemon=True).start()
 
 if __name__ == '__main__':
     main()

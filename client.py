@@ -1,80 +1,54 @@
 #!/usr/bin/env python3
-import socket
-import json
-import threading
-import sys
-import os
+import socket, json, threading, sys, os
 from pathlib import Path
 
-class MessengerClient:
-    def __init__(self, host, port, user):
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect((host, port))
+class Client:
+    def __init__(self, user):
         self.user = user
-        self.db = Path(f"messages_{user}.json")
-        self.history = self._load_history()
-        
-        # Envoi du nom d'utilisateur
-        self.sock.sendall(json.dumps({'user': user}).encode() + b'\n')
-        print(f"✓ Connecté en tant que '{user}' → {host}:{port}")
-        print("Commandes: /users (liste), /quit (déconnexion)\n")
+        self.sock = socket.create_connection(('65.75.201.11', 12345))
+        self.sock.sendall(json.dumps({'user': user}).encode())
+        self.db = Path(f"msgs_{user}.json")
+        self.msgs = json.loads(self.db.read_text()) if self.db.exists() else []
+        threading.Thread(target=self._listen, daemon=True).start()
+        print(f"✓ Connecté en tant que @{user} → 65.75.201.11:12345")
+        print("→ Format: destinataire message\n   Ex: bob Salut !\n   Ex: * Bonjour à tous\n   /q pour quitter\n")
 
-    def _load_history(self):
-        return json.loads(self.db.read_text()) if self.db.exists() else []
-
-    def _save_history(self):
-        self.db.write_text(json.dumps(self.history, indent=2, ensure_ascii=False))
-
-    def send_msg(self, to, text):
-        msg = {'to': to, 'text': text}
-        self.sock.sendall(json.dumps(msg).encode() + b'\n')
-        self.history.append({'dir': 'out', 'to': to, 'text': text})
-        self._save_history()
-
-    def recv_loop(self):
-        buf = b''
+    def _listen(self):
+        buf = ""
         while True:
             try:
-                data = self.sock.recv(4096)
-                if not data:
-                    break
-                buf += data
-                while b'\n' in buf:
-                    line, buf = buf.split(b'\n', 1)
-                    msg = json.loads(line.decode())
-                    if msg['to'] == self.user or msg['to'] == '*':
-                        print(f"\n[📨 {msg['from']}] {msg['text']}")
-                        self.history.append({'dir': 'in', 'from': msg['from'], 'text': msg['text']})
-                        self._save_history()
-                        print(f"\n{self.user}> ", end='', flush=True)
-            except:
-                break
-        print("\n\n⚠ Déconnecté du serveur")
-        sys.exit(0)
+                buf += self.sock.recv(1024).decode()
+                while '\n' in buf:
+                    line, buf = buf.split('\n', 1)
+                    if line.strip():
+                        m = json.loads(line)
+                        if m.get('to') in (self.user, '*'):
+                            print(f"\n📨 @{m['from']}: {m['text']}")
+                            self.msgs.append({'dir': 'in', 'from': m['from'], 'text': m['text']})
+                            self._save()
+                            print(f"\n{self.user}> ", end='', flush=True)
+            except: break
+        print("\n\n⚠ Déconnecté"); sys.exit(0)
+
+    def _save(self):
+        self.db.write_text(json.dumps(self.msgs, ensure_ascii=False))
 
     def run(self):
-        threading.Thread(target=self.recv_loop, daemon=True).start()
         while True:
             try:
                 line = input(f"{self.user}> ").strip()
-                if not line:
-                    continue
-                if line == '/quit':
-                    break
-                if line == '/users':
-                    print(f"Utilisateurs connectés: {', '.join(set(m['from'] for m in self.history if 'from' in m)) or 'aucun'}")
-                    continue
-                if ':' not in line:
-                    print("Format: destinataire:message")
-                    continue
-                to, text = line.split(':', 1)
-                self.send_msg(to.strip(), text.strip())
-            except (EOFError, KeyboardInterrupt):
-                break
+                if line == '/q': break
+                if not line or ' ' not in line: continue
+                to, text = line.split(' ', 1)
+                msg = {'to': to, 'text': text}
+                self.sock.sendall((json.dumps(msg) + '\n').encode())
+                self.msgs.append({'dir': 'out', 'to': to, 'text': text})
+                self._save()
+            except (EOFError, KeyboardInterrupt): break
         self.sock.close()
 
 if __name__ == '__main__':
-    if len(sys.argv) != 4:
-        print(f"Usage: {sys.argv[0]} <serveur> <port> <votre_nom>")
+    if len(sys.argv) != 2:
+        print(f"Usage: {sys.argv[0]} <votre_pseudo>")
         sys.exit(1)
-    MessengerClient(sys.argv[1], int(sys.argv[2]), sys.argv[3]).run()
+    Client(sys.argv[1]).run()
