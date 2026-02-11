@@ -1,14 +1,38 @@
-import socket,json,threading,sys,os
-u=sys.argv[1];f=f"m_{u}.json";h=json.loads(open(f).read())if os.path.exists(f)else[]
-s=socket.create_connection(('65.75.201.11',12345));s.sendall((json.dumps({'u':u})+'\n').encode());print(f"@{u} connecté")
-def r():
- b=''
- while 1:
-  b+=s.recv(999).decode()
-  while'\n'in b:l,b=b.split('\n',1);m=json.loads(l);print(f"\n📩 @{m['f']}: {m['t']}");h.append(m);open(f,'w').write(json.dumps(h))
-threading.Thread(target=r,daemon=1).start()
-while 1:
- l=input(f"{u}> ").strip()
- if l=='/q':break
- t=l.split(' ',1);d=t[0] if len(t)>1 else '*';m={'to':d,'t':t[1] if len(t)>1 else t[0]};s.sendall((json.dumps(m)+'\n').encode());h.append({'f':u,'to':d,'t':m['t']});open(f,'w').write(json.dumps(h))
-s.close()
+#!/usr/bin/env python3
+import socket, json, threading, sys, os
+
+user = sys.argv[1]
+db = f"msgs_{user}.json"
+history = json.loads(open(db).read()) if os.path.exists(db) else []
+
+sock = socket.create_connection(('65.75.201.11', 12345))
+sock.sendall((json.dumps({'user': user}) + '\n').encode())
+print(f"@{user} connecté")
+
+def receive():
+    buf = ''
+    while True:
+        buf += sock.recv(999).decode()
+        while '\n' in buf:
+            line, buf = buf.split('\n', 1)
+            msg = json.loads(line)
+            if msg.get('to') in (user, '*'):
+                print(f"\n📩 @{msg['from']}: {msg['text']}")
+                history.append(msg)
+                open(db, 'w').write(json.dumps(history))
+
+threading.Thread(target=receive, daemon=True).start()
+
+while True:
+    line = input(f"{user}> ").strip()
+    if line == '/q':
+        break
+    parts = line.split(' ', 1)
+    dest = parts[0] if len(parts) > 1 else '*'
+    text = parts[1] if len(parts) > 1 else parts[0]
+    msg = {'to': dest, 'text': text}
+    sock.sendall((json.dumps(msg) + '\n').encode())
+    history.append({'from': user, 'to': dest, 'text': text})
+    open(db, 'w').write(json.dumps(history))
+
+sock.close()
