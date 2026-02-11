@@ -51,4 +51,15 @@ class Client:
                 text = parts[1] if len(parts) > 1 else parts[0]
                 
                 # Envoi
-                msg =
+                msg = {'to': to, 'text': text}
+                self.sock.sendall((json.dumps(msg) + '\n').encode())
+                self.msgs.append({'dir':'out','to':to,'text':text})
+                self._save()
+            except (EOFError, KeyboardInterrupt): break
+        self.sock.close()
+
+if __name__ == '__main__':
+    if len(sys.argv) != 2:
+        print(f"Usage: {sys.argv[0]} <votre_pseudo>")
+        sys.exit(1)
+    Client(sys.argv[1]).run()
