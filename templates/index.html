@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Messagerie</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>💬 Mini Messagerie</h1>
+        
+        <div class="chat-box" id="chatBox">
+            <!-- Les messages apparaîtront ici -->
+        </div>
+        
+        <div class="input-area">
+            <input 
+                type="text" 
+                id="username" 
+                placeholder="Votre nom" 
+                maxlength="20"
+            >
+            <input 
+                type="text" 
+                id="messageInput" 
+                placeholder="Tapez votre message..." 
+                maxlength="500"
+            >
+            <button onclick="sendMessage()">Envoyer</button>
+        </div>
+        
+        <div id="status"></div>
+    </div>
+
+    <script>
+        // Variables globales
+        let lastUpdate = null;
+        const API_URL = '/api/messages';
+        
+        // Charger les messages au démarrage
+        loadMessages();
+        
+        // Rafraîchir automatiquement toutes les 2 secondes
+        setInterval(loadMessages, 2000);
+        
+        // Fonction pour charger les messages
+        async function loadMessages() {
+            try {
+                const response = await fetch(API_URL);
+                const messages = await response.json();
+                
+                // Trier les messages par date (du plus ancien au plus récent)
+                messages.sort((a, b) => 
+                    new Date(a.timestamp) - new Date(b.timestamp)
+                );
+                
+                displayMessages(messages);
+            } catch (error) {
+                console.error('Erreur lors du chargement des messages:', error);
+                showStatus('Erreur lors du chargement des messages', 'error');
+            }
+        }
+        
+        // Fonction pour afficher les messages
+        function displayMessages(messages) {
+            const chatBox = document.getElementById('chatBox');
+            chatBox.innerHTML = '';
+            
+            messages.forEach(msg => {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'message';
+                
+                const timestamp = new Date(msg.timestamp).toLocaleTimeString('fr-FR', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
+                messageDiv.innerHTML = `
+                    <div class="message-header">
+                        <span class="username">${escapeHtml(msg.username)}</span>
+                        <span class="timestamp">${timestamp}</span>
+                    </div>
+                    <div class="message-content">${escapeHtml(msg.content)}</div>
+                `;
+                
+                chatBox.appendChild(messageDiv);
+            });
+            
+            // Faire défiler vers le bas
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+        
+        // Fonction pour envoyer un message
+        async function sendMessage() {
+            const usernameInput = document.getElementById('username');
+            const messageInput = document.getElementById('messageInput');
+            const username = usernameInput.value.trim();
+            const content = messageInput.value.trim();
+            
+            // Validation
+            if (!username) {
+                showStatus('Veuillez entrer votre nom', 'error');
+                usernameInput.focus();
+                return;
+            }
+            
+            if (!content) {
+                showStatus('Veuillez entrer un message', 'error');
+                messageInput.focus();
+                return;
+            }
+            
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: username,
+                        content: content
+                    })
+                });
+                
+                if (response.ok) {
+                    // Message envoyé avec succès
+                    messageInput.value = '';
+                    messageInput.focus();
+                    
+                    // Recharger les messages immédiatement
+                    loadMessages();
+                } else {
+                    const error = await response.json();
+                    showStatus(error.error || 'Erreur lors de l\'envoi', 'error');
+                }
+            } catch (error) {
+                console.error('Erreur lors de l\'envoi:', error);
+                showStatus('Erreur de connexion au serveur', 'error');
+            }
+        }
+        
+        // Fonction pour afficher un message de statut
+        function showStatus(message, type = 'success') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = type;
+            
+            // Effacer après 3 secondes
+            setTimeout(() => {
+                statusDiv.textContent = '';
+                statusDiv.className = '';
+            }, 3000);
+        }
+        
+        // Fonction pour échapper le HTML (sécurité)
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Envoyer avec la touche Entrée
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
