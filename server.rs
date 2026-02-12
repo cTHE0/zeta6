@@ -40,7 +40,8 @@ async fn handle_client(
     let mut line = String::new();
     
     // Login
-    writer.write_all(b"USERNAME: ").await?;
+    writer.write_all(b"USERNAME:\n").await?;
+    writer.flush().await?;
     reader.read_line(&mut line).await?;
     let username = line.trim().to_string();
     line.clear();
@@ -58,6 +59,7 @@ async fn handle_client(
     drop(q);
     
     writer.write_all(b"OK\n").await?;
+    writer.flush().await?;
     
     // Boucle principale
     loop {
@@ -79,6 +81,7 @@ async fn handle_client(
                     let mut q = queue.lock().await;
                     q.entry(to.to_string()).or_insert_with(Vec::new).push(msg);
                     writer.write_all(b"ACK\n").await?;
+                    writer.flush().await?;
                 }
             }
             "POLL" => {
@@ -89,6 +92,7 @@ async fn handle_client(
                     }
                 }
                 writer.write_all(b"POLL_OK\n").await?;
+                writer.flush().await?;
             }
             _ => {}
         }

@@ -16,17 +16,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let username = &args[2];
     let msg_file = format!("{}_messages.txt", username);
     
+    println!("Connexion à {}...", server);
     let socket = TcpStream::connect(server).await?;
+    println!("✓ Connecté au serveur");
     let (reader, mut writer) = socket.into_split();
     let mut reader = TokioBufReader::new(reader);
     let mut line = String::new();
     
     // Login
+    println!("Authentification...");
     reader.read_line(&mut line).await?;
     writer.write_all(format!("{}\n", username).as_bytes()).await?;
     line.clear();
     
     // Recevoir messages en attente
+    println!("Récupération des messages...");
     loop {
         line.clear();
         reader.read_line(&mut line).await?;
@@ -41,7 +45,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     
+    println!("✓ Prêt !");
     println!("\nCommandes: /send <user> <message> | /poll | /list | /quit");
+    print!("> ");
+    std::io::stdout().flush()?;
     
     // Thread pour recevoir messages
     let msg_file_clone = msg_file.clone();
