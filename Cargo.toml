@@ -1,0 +1,15 @@
+[package]
+name = "messaging"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "server"
+path = "server.rs"
+
+[[bin]]
+name = "client"
+path = "client.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
